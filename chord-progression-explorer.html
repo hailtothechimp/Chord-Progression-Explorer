@@ -992,14 +992,20 @@
         <option value="wide">Wide Open (1-5-3 two octaves)</option>
         <option value="doubled">Octave Doubled (Full)</option>
         <option value="stride">Stride Bass (1-octave-down + chord)</option>
+        <option value="choir">Choir (4-Part Hymn / SATB)</option>
+        <option value="cluster">Cluster (Add2 close)</option>
       </optgroup>
       <optgroup label="Jazz">
         <option value="drop2">Drop-2 (Jazz)</option>
         <option value="drop3">Drop-3 (Wider Jazz)</option>
         <option value="shell">Shell (1-3-7, jazz comp)</option>
+        <option value="rootless">Rootless (Bill Evans 3-5-7-9)</option>
+        <option value="hancock">Hancock Spread (1-5-9-3-7)</option>
+        <option value="soWhat">"So What" (Modal Quartal + 3rd)</option>
       </optgroup>
       <optgroup label="Rock / Folk">
         <option value="power">Power (1-5-8va, no 3rd)</option>
+        <option value="powerWide">Power Wide (1-5-1-5)</option>
         <option value="quartal">Quartal Stack (4ths)</option>
       </optgroup>
     </select>
@@ -1325,6 +1331,49 @@ function voiceChord(rootPc, quality, prevMidi, useSharps, voicing, extension) {
         // Stacked perfect 4ths above the root — "So What" modal voicing
         // For Cmaj this produces C-F-Bb-Eb-style stacks; works as a flavor regardless of quality
         offsets = [0, 5, 10, 15];
+        break;
+      case 'rootless':
+        // Bill Evans' rootless A: drop the root, play 3-5-7-9 above
+        if (intervals.length >= 4) {
+          offsets = [intervals[1], intervals[2], intervals[3], 14];
+        } else {
+          // Triad rootless: 3, 5, and the 3rd doubled an octave higher for body
+          offsets = [intervals[1], intervals[2], intervals[1] + 12];
+        }
+        break;
+      case 'soWhat':
+        // Miles Davis "So What" voicing: four stacked perfect 4ths topped by a maj 3rd.
+        // Same shape regardless of chord quality — it's a modal color, not a triadic voicing.
+        offsets = [0, 5, 10, 15, 19];
+        break;
+      case 'hancock':
+        // Hancock-style modern spread: 1, 5, 9, 3 (8va up), and 7 (8va up) for 7th chords.
+        if (intervals.length >= 4) {
+          offsets = [0, 7, 14, intervals[1] + 12, intervals[3] + 12];
+        } else {
+          offsets = [0, 7, 14, intervals[1] + 12];
+        }
+        break;
+      case 'choir':
+        // SATB four-voice hymnal spacing: root in the bass + close-position chord above.
+        if (intervals.length >= 4) {
+          offsets = [-12, intervals[1], intervals[2], intervals[3]];
+        } else {
+          offsets = [-12, intervals[1], intervals[2], 12];
+        }
+        break;
+      case 'cluster':
+        // Pop "Add2" cluster — root + 2nd + 3rd + 5th packed close together. Adds the
+        // chromatic neighbor for that modern indie-folk shimmer.
+        if (intervals.length >= 4) {
+          offsets = [0, 2, intervals[1], intervals[2], intervals[3]];
+        } else {
+          offsets = [0, 2, intervals[1], intervals[2]];
+        }
+        break;
+      case 'powerWide':
+        // Two-octave power chord: 1-5-1-5. Bigger than plain power, no 3rd.
+        offsets = [0, 7, 12, 19];
         break;
       default:
         offsets = intervals.slice();
@@ -1654,6 +1703,13 @@ const PROGRESSIONS = [
   { cat:'Pop/Cinematic', id:'i-III-VI-VII', label:'i – III – VI – VII',                  mode:'minor', romans:['i','III','VI','VII'] },
   { cat:'Pop/Cinematic', id:'i-VII-III-VI', label:'i – VII – III – VI',                  mode:'minor', romans:['i','VII','III','VI'] },
 
+  // Rotations — same loops as above but entering on a different chord
+  { cat:'Pop/Cinematic', id:'VI-III-VII-i', label:'VI – III – VII – i (Zombie Rotation)',mode:'minor', romans:['VI','III','VII','i'] },
+  { cat:'Pop/Cinematic', id:'III-VII-VI-i', label:'III – VII – VI – i',                  mode:'minor', romans:['III','VII','VI','i'] },
+  { cat:'Pop/Cinematic', id:'III-VI-VII-i', label:'III – VI – VII – i (Slow Build)',     mode:'minor', romans:['III','VI','VII','i'] },
+  { cat:'Pop/Cinematic', id:'VII-VI-III-i', label:'VII – VI – III – i (Descending)',     mode:'minor', romans:['VII','VI','III','i'] },
+  { cat:'Pop/Cinematic', id:'iv-III-VI-i',  label:'iv – III – VI – i',                   mode:'minor', romans:['iv','III','VI','i'] },
+
   // ── Classical / Cadential ──
   { cat:'Classical/Cadential', id:'i-VII-VI-V', label:'i – VII – VI – V (Andalusian/Flamenco)', mode:'minor', romans:['i','VII','VI','V'] },
   { cat:'Classical/Cadential', id:'i-iv-V-i',   label:'i – iv – V – i (Harmonic Cadence)',     mode:'minor', romans:['i','iv','V','i'] },
@@ -1663,6 +1719,15 @@ const PROGRESSIONS = [
   { cat:'Classical/Cadential', id:'i-bII-V-i',  label:'i – ♭II – V – i (Neapolitan)',          mode:'minor', romans:['i','bII','V','i'] },
   { cat:'Classical/Cadential', id:'i-iv-bII-V', label:'i – iv – ♭II – V (Neapolitan 6)',       mode:'minor', romans:['i','iv','bII','V'] },
   { cat:'Classical/Cadential', id:'i-V-i',      label:'i – V – i (Authentic Minor)',           mode:'minor', romans:['i','V','i'] },
+
+  // Resolutions — progressions that lead INTO i instead of starting on it
+  { cat:'Classical/Cadential', id:'iv-V-i',     label:'iv – V – i (Plagal-Authentic)',         mode:'minor', romans:['iv','V','i'] },
+  { cat:'Classical/Cadential', id:'VI-VII-i',   label:'VI – VII – i (Cinematic Rise)',         mode:'minor', romans:['VI','VII','i'] },
+  { cat:'Classical/Cadential', id:'VII-VI-i',   label:'VII – VI – i (Descending Cadence)',     mode:'minor', romans:['VII','VI','i'] },
+  { cat:'Classical/Cadential', id:'VI-iv-V-i',  label:'VI – iv – V – i (Extended Cadence)',    mode:'minor', romans:['VI','iv','V','i'] },
+  { cat:'Classical/Cadential', id:'iv-VII-III-i', label:'iv – VII – III – i (Jazz Resolve)',   mode:'minor', romans:['iv','VII','III','i'] },
+  { cat:'Classical/Cadential', id:'III-VII-i',  label:'III – VII – i (Mediant Entry)',         mode:'minor', romans:['III','VII','i'] },
+  { cat:'Classical/Cadential', id:'bII-V-i',    label:'♭II – V – i (Neapolitan Approach)',     mode:'minor', romans:['bII','V','i'] },
 
   // ── Modal Minor ──
   { cat:'Modal Minor', id:'i-bVII-IV-i', label:'i – ♭VII – IV – i (Dorian Vamp)',    mode:'minor', romans:['i','bVII','IV','i'] },
@@ -2546,6 +2611,18 @@ const VOICING_INFO = [
     desc: 'Root + fifth + octave root — no third. The anthemic rock chord. Removing the 3rd makes the chord ambiguous between major and minor, which is why it sounds great played loud and distorted.' },
   { id: 'quartal', name: 'Quartal Stack (4ths)',
     desc: 'Stacked perfect fourths above the root: C–F–B♭–E♭, etc. Iconic modal-jazz sound from Miles Davis\' "So What" and McCoy Tyner\'s vamps. Doesn\'t strictly preserve chord tones — it\'s a modal flavor, not a triadic voicing.' },
+  { id: 'rootless', name: 'Rootless (Bill Evans 3-5-7-9)',
+    desc: 'Drops the root entirely and plays only the upper structure: 3rd, 5th, 7th, and 9th. The defining left-hand voicing of Bill Evans, Wynton Kelly, and Red Garland. Modern bassist-pianist comping — assumes someone else has the root covered. For triads, plays 3 and 5 with the 3rd doubled an octave higher.' },
+  { id: 'hancock', name: 'Hancock Spread (1-5-9-3-7)',
+    desc: 'Wide modern-jazz spread: root and fifth low, ninth in the middle, 3rd and 7th up high. Herbie Hancock\'s signature spacing. Each voice gets room to breathe, and the included 9th gives that lush "Maiden Voyage" color.' },
+  { id: 'soWhat', name: '"So What" (Modal Quartal + 3rd)',
+    desc: 'Miles Davis\' famous voicing from "So What" — four perfect fourths stacked above the root, with a major third on top. Pure modal jazz. The exact intervals stay the same on every chord, so even a chord change feels like a vibe shift rather than a function change.' },
+  { id: 'choir', name: 'Choir (4-Part Hymn / SATB)',
+    desc: 'Four voices in classical hymnal spacing: a bass note in the lower register and a close-position chord stacked above. The sound of choral arrangements, sacred music, and gospel piano. Fuller and more "vertical" than Drop voicings.' },
+  { id: 'cluster', name: 'Cluster (Add2 close)',
+    desc: 'Adds the 2nd to the chord and packs the voices close together (1-2-3-5). That little dissonance between the root and the 2nd creates the shimmer you hear all over modern indie-folk and Bon Iver-style ballads. Closer relative of the "add9" pop chord, but tighter and more present.' },
+  { id: 'powerWide', name: 'Power Wide (1-5-1-5)',
+    desc: 'Same DNA as the rock Power chord but two octaves wide: root, fifth, root-octave, fifth-octave. Still no 3rd, so still ambiguous between major and minor — but more massive. Stadium rock territory.' },
 ];
 
 function renderVoicingInfo() {
