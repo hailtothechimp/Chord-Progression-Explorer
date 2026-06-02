@@ -899,6 +899,35 @@
   #play-btn.playing { background: #f87171; color: #0c1220; }
   #play-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
+  /* Loop toggle (next to Play) */
+  #loop-btn {
+    background: var(--panel);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+  }
+  #loop-btn:hover {
+    background: rgba(125, 211, 252, 0.1);
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  #loop-btn.active {
+    background: rgba(125, 211, 252, 0.18);
+    color: var(--accent);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent) inset;
+  }
+  #loop-btn svg { flex-shrink: 0; }
+
   .tempo {
     display: flex;
     align-items: center;
@@ -1097,6 +1126,15 @@
   <button id="play-btn" disabled>
     <span id="play-icon">▶</span>
     <span id="play-label">Play Progression</span>
+  </button>
+  <button id="loop-btn" type="button" title="Loop playback — keep cycling until stopped">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="17 1 21 5 17 9"/>
+      <path d="M3 11V9a4 4 0 014-4h14"/>
+      <polyline points="7 23 3 19 7 15"/>
+      <path d="M21 13v2a4 4 0 01-4 4H3"/>
+    </svg>
+    <span>Loop</span>
   </button>
   <div class="tempo">
     <span>Tempo</span>
@@ -1820,6 +1858,7 @@ let passingChords = [];     // length = mainChords.length - 1; null when slot is
 let chordElementMap = new WeakMap();  // chord object → DOM element
 let isPlaying = false;
 let playbackTimers = [];
+let loopEnabled = false;
 
 // Custom-progression state — only used when progSelect.value === '__custom__'
 let customProgression = [];  // [{ roman, extension }, ...]
@@ -2355,6 +2394,13 @@ async function playProgression() {
   playLabel.textContent = 'Stop';
   playBtn.classList.add('playing');
 
+  scheduleCycle();
+}
+
+// Schedule one pass through the current progression. If Loop is on, recursively
+// schedule the next pass at the end so playback keeps cycling.
+function scheduleCycle() {
+  if (!isPlaying) return;
   const bpm = parseInt(tempoSlider.value, 10);
   const beatMs = (60 / bpm) * 1000;
 
@@ -2373,20 +2419,23 @@ async function playProgression() {
     });
   };
 
-  // Build a flat schedule — each main chord and each passing chord gets one full beat
   let beat = 0;
   for (let i = 0; i < mainChords.length; i++) {
-    const t = beat * beatMs;
-    playbackTimers.push(setTimeout(() => triggerChord(mainChords[i]), t));
+    playbackTimers.push(setTimeout(() => triggerChord(mainChords[i]), beat * beatMs));
     beat++;
     if (i < mainChords.length - 1 && passingChords[i]) {
-      const tp = beat * beatMs;
-      playbackTimers.push(setTimeout(() => triggerChord(passingChords[i]), tp));
+      playbackTimers.push(setTimeout(() => triggerChord(passingChords[i]), beat * beatMs));
       beat++;
     }
   }
 
-  playbackTimers.push(setTimeout(() => stopPlayback(), beat * beatMs + 400));
+  const cycleEnd = beat * beatMs;
+  if (loopEnabled) {
+    // Restart cleanly when the cycle ends — keeps cycling until the user stops
+    playbackTimers.push(setTimeout(() => scheduleCycle(), cycleEnd));
+  } else {
+    playbackTimers.push(setTimeout(() => stopPlayback(), cycleEnd + 400));
+  }
 }
 
 // ─── Passing chord modal ───────────────────────────────────
@@ -2582,6 +2631,10 @@ tempoSlider.addEventListener('input', () => {
 });
 
 playBtn.addEventListener('click', playProgression);
+document.getElementById('loop-btn').addEventListener('click', () => {
+  loopEnabled = !loopEnabled;
+  document.getElementById('loop-btn').classList.toggle('active', loopEnabled);
+});
 
 // ─── Voicing cheat-sheet modal ─────────────────────────────
 const VOICING_INFO = [
