@@ -471,6 +471,36 @@
     font-size: 0.95rem;
   }
 
+  /* Touch-device adjustments: hover doesn't exist, so reveal action buttons
+     by default and bump tap targets a little for finger-sized hits. */
+  @media (hover: none) and (pointer: coarse) {
+    .chord-ext-btn,
+    .chord-remove,
+    .delete-passing {
+      opacity: 1;
+    }
+    .chord-remove,
+    .delete-passing {
+      width: 28px;
+      height: 28px;
+      font-size: 1.05rem;
+    }
+    .chord-ext-btn {
+      font-size: 12px;
+      padding: 4px 14px;
+    }
+    .palette-chip { padding: 8px 14px 10px; }
+    .palette-chip-numeral { font-size: 20px; }
+    .add-passing { width: 42px; height: 42px; font-size: 1.3rem; }
+    /* Prevent iOS double-tap zoom on chord blocks (we use taps as a primary input) */
+    .chord, .palette-chip, .add-passing, .chord-remove, .chord-ext-btn,
+    .delete-passing, .play-btn, .library-item button {
+      touch-action: manipulation;
+    }
+    /* Show a grab cursor / visual hint that chord blocks in custom mode are draggable */
+    .chord.draggable-touch { cursor: grab; }
+  }
+
   /* Loaded-progression indicator (shown beneath controls when a library item is open) */
   #loaded-indicator {
     background: rgba(125, 211, 252, 0.06);
@@ -970,7 +1000,7 @@
 
 <div id="custom-panel" hidden>
   <div class="custom-header">
-    <span class="custom-instructions">Click a chord to add &nbsp;·&nbsp; drag chords to reorder &nbsp;·&nbsp; hover ✕ to remove</span>
+    <span class="custom-instructions">Tap a chord to add &nbsp;·&nbsp; drag chords to reorder &nbsp;·&nbsp; ✕ to remove</span>
     <button id="custom-clear" type="button">Clear all</button>
   </div>
   <div class="palette-groups"></div>
@@ -1949,6 +1979,9 @@ function makeChordBlock(chord, isPassing) {
     // Custom-mode extras: drag-to-reorder + × remove
     if (isCustomMode()) {
       const myIndex = () => mainChords.indexOf(chord);
+      block.classList.add('draggable-touch');
+
+      // ── HTML5 drag-and-drop (desktop mouse) ──
       block.draggable = true;
       block.addEventListener('dragstart', (e) => {
         dragSrcIdx = myIndex();
@@ -1973,6 +2006,68 @@ function makeChordBlock(chord, isPassing) {
         if (dragSrcIdx !== null && toIdx >= 0) moveCustomChord(dragSrcIdx, toIdx);
       });
 
+      // ── Touch-based reorder (HTML5 drag-and-drop doesn't fire on touch) ──
+      let touchState = null;
+      block.addEventListener('touchstart', (e) => {
+        // Don't start a drag if the user is touching a button inside the chord
+        if (e.target.closest('button')) return;
+        const t = e.touches[0];
+        touchState = {
+          fromIdx: myIndex(),
+          startX: t.clientX,
+          startY: t.clientY,
+          dragging: false,
+          overEl: null,
+        };
+      }, { passive: true });
+
+      block.addEventListener('touchmove', (e) => {
+        if (!touchState) return;
+        const t = e.touches[0];
+        const dx = t.clientX - touchState.startX;
+        const dy = t.clientY - touchState.startY;
+        if (!touchState.dragging) {
+          // Only initiate a drag when motion is dominantly horizontal — keeps vertical
+          // scrolls feeling normal.
+          if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) {
+            touchState.dragging = true;
+            block.classList.add('dragging');
+          } else if (Math.abs(dy) > 12) {
+            touchState = null; // user is scrolling; bail out
+            return;
+          } else {
+            return;
+          }
+        }
+        e.preventDefault();
+        document.querySelectorAll('.chord.drag-over').forEach(b => b.classList.remove('drag-over'));
+        const el = document.elementFromPoint(t.clientX, t.clientY);
+        const over = el && el.closest && el.closest('.chord');
+        if (over && over !== block && !over.classList.contains('passing')) {
+          over.classList.add('drag-over');
+          touchState.overEl = over;
+        } else {
+          touchState.overEl = null;
+        }
+      }, { passive: false });
+
+      const finishTouch = () => {
+        if (!touchState) return;
+        block.classList.remove('dragging');
+        document.querySelectorAll('.chord.drag-over').forEach(b => b.classList.remove('drag-over'));
+        if (touchState.dragging && touchState.overEl) {
+          const blocks = Array.from(progressionEl.querySelectorAll('.chord:not(.passing)'));
+          const toIdx = blocks.indexOf(touchState.overEl);
+          if (toIdx >= 0 && toIdx !== touchState.fromIdx) {
+            moveCustomChord(touchState.fromIdx, toIdx);
+          }
+        }
+        touchState = null;
+      };
+      block.addEventListener('touchend', finishTouch);
+      block.addEventListener('touchcancel', finishTouch);
+
+      // ── × remove button ──
       const remove = document.createElement('button');
       remove.className = 'chord-remove';
       remove.title = 'Remove chord';
