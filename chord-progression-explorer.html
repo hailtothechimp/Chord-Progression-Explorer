@@ -867,6 +867,84 @@
   }
   .suggestion-actions button.primary:hover { background: #0ea5e9; }
 
+  /* "All Chord Types" chip palette inside the extension modal */
+  .chord-type-section {
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+  }
+  .chord-type-section-title {
+    font-size: 0.98rem;
+    color: var(--text);
+    font-weight: 600;
+    margin-bottom: 3px;
+  }
+  .chord-type-section-subtitle {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-bottom: 14px;
+    line-height: 1.45;
+  }
+  .chord-type-group {
+    margin-bottom: 12px;
+  }
+  .chord-type-group-label {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+  .chord-type-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .chord-type-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 12px 8px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.1s, border-color 0.1s, transform 0.08s;
+    min-width: 64px;
+    user-select: none;
+  }
+  .chord-type-chip:hover {
+    background: rgba(125, 211, 252, 0.12);
+    border-color: var(--accent);
+    transform: translateY(-1px);
+  }
+  .chord-type-chip:active { transform: translateY(0); }
+  .chord-type-chip.current {
+    background: rgba(125, 211, 252, 0.2);
+    border-color: var(--accent);
+  }
+  .chord-type-chip-numeral {
+    font-family: 'Georgia', serif;
+    font-size: 17px;
+    color: var(--text);
+    line-height: 1.05;
+  }
+  .chord-type-chip-numeral .ct-suffix {
+    font-size: 11px;
+    color: var(--accent);
+    margin-left: 1px;
+    font-style: italic;
+    vertical-align: super;
+  }
+  .chord-type-chip-name {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 3px;
+    font-family: 'Helvetica', sans-serif;
+  }
+
   /* ─── Playback bar ───────────────────────────────────────── */
   .playback {
     background: var(--panel);
@@ -1451,9 +1529,79 @@ function buildChordName(rootPc, quality, extension, useSharps) {
   }
   // Sus passed as an extension on a non-sus quality overrides the quality designation
   if (extension === 'sus4' || extension === 'sus2') return root + extension;
+  // Half-diminished: dim quality + 7 extension uses ø7 notation, not °7 (which is fully dim)
+  if (quality === 'dim' && extension === '7') return root + 'ø7';
   const baseSfx = { maj:'', min:'m', dim:'°', dim7:'°7', dom7:'7', aug:'+' }[quality] || '';
   return root + baseSfx + (extension || '');
 }
+
+// Make the Nashville-numeral "base" (e.g., "I", "ii", "♭VII") from a chord's
+// pitch class + key + quality. Case follows quality (lowercase = min/dim, upper = maj/aug).
+function makeNumeralBase(rootPc, keyPc, quality) {
+  const iv = ((rootPc - keyPc) % 12 + 12) % 12;
+  const DIATONIC_MAP = {0:'I', 2:'II', 4:'III', 5:'IV', 7:'V', 9:'VI', 11:'VII'};
+  const FLAT_MAP     = {1:'II', 3:'III', 6:'V',   8:'VI', 10:'VII'};
+  let prefix = '', body;
+  if (DIATONIC_MAP[iv] !== undefined) body = DIATONIC_MAP[iv];
+  else { body = FLAT_MAP[iv]; prefix = 'b'; }
+  const isLower = quality === 'min' || quality === 'dim' || quality === 'dim7';
+  if (isLower) body = body.toLowerCase();
+  return prefix + body;
+}
+
+// Compute the chord-type suffix (e.g., "maj7", "ø7", "+", "sus4") for a given quality+extension
+const NUMERAL_SUFFIXES = {
+  'maj|null': '',      'maj|6':    '6',    'maj|7':    '7',     'maj|maj7':  'maj7',
+  'maj|add9': 'add9',  'maj|9':    '9',    'maj|maj9': 'maj9',  'maj|11':    '11',  'maj|13': '13',
+  'min|null': '',      'min|6':    '6',    'min|7':    '7',     'min|maj7':  '(maj7)',
+  'min|add9': '(add9)','min|9':    '9',
+  'dim|null': '°',     'dim|7':    'ø7',
+  'dim7|null': '°7',
+  'aug|null': '+',     'aug|7':    '+7',   'aug|maj7': '+(maj7)',
+  'sus2|null': 'sus2', 'sus2|7':   '7sus2',
+  'sus4|null': 'sus4', 'sus4|7':   '7sus4', 'sus4|9':  '9sus4',
+};
+function makeNumeralSuffix(quality, extension) {
+  const k = quality + '|' + (extension || 'null');
+  return NUMERAL_SUFFIXES[k] !== undefined ? NUMERAL_SUFFIXES[k] : (extension || '');
+}
+
+// All chord types the user can apply via the "All Chord Types" palette in the extension modal.
+const CHORD_TYPE_GROUPS = [
+  { label: 'Triads', types: [
+    { quality:'maj',  extension:null,    name:'Major' },
+    { quality:'min',  extension:null,    name:'Minor' },
+    { quality:'dim',  extension:null,    name:'Diminished' },
+    { quality:'aug',  extension:null,    name:'Augmented' },
+    { quality:'sus2', extension:null,    name:'Sus 2' },
+    { quality:'sus4', extension:null,    name:'Sus 4' },
+  ]},
+  { label: '6th Chords', types: [
+    { quality:'maj',  extension:'6',     name:'Major 6' },
+    { quality:'min',  extension:'6',     name:'Minor 6' },
+  ]},
+  { label: '7th Chords', types: [
+    { quality:'maj',  extension:'7',     name:'Dominant 7' },
+    { quality:'maj',  extension:'maj7',  name:'Major 7' },
+    { quality:'min',  extension:'7',     name:'Minor 7' },
+    { quality:'min',  extension:'maj7',  name:'Minor-Major 7' },
+    { quality:'dim',  extension:'7',     name:'Half-Diminished 7' },
+    { quality:'dim7', extension:null,    name:'Diminished 7' },
+    { quality:'aug',  extension:'7',     name:'Augmented 7' },
+  ]},
+  { label: '9ths & Extensions', types: [
+    { quality:'maj',  extension:'add9',  name:'Add 9' },
+    { quality:'min',  extension:'add9',  name:'Minor Add 9' },
+    { quality:'maj',  extension:'9',     name:'Dominant 9' },
+    { quality:'maj',  extension:'maj9',  name:'Major 9' },
+    { quality:'min',  extension:'9',     name:'Minor 9' },
+  ]},
+  { label: 'Suspended 7ths', types: [
+    { quality:'sus4', extension:'7',     name:'7 sus 4' },
+    { quality:'sus4', extension:'9',     name:'9 sus 4' },
+    { quality:'sus2', extension:'7',     name:'7 sus 2' },
+  ]},
+];
 
 // Resolve a progression to chord metadata (notes filled in later by applyVoiceLeading)
 function resolveProgression(romanList, keyPc, mode) {
@@ -1471,6 +1619,7 @@ function resolveProgression(romanList, keyPc, mode) {
       name: buildChordName(rootPc, d.quality, null, useSharpsForRoot),
       rootPc,
       quality: d.quality,
+      naturalQuality: d.quality,
       useSharps: useSharpsForRoot,
       extension: null,
       notes: null,
@@ -1488,7 +1637,10 @@ function applyVoiceLeading(sequence) {
   for (let i = 0; i < sequence.length; i++) {
     const c = sequence[i];
     const isFinal = i === sequence.length - 1;
-    const v = isFinal ? 'smooth' : voicing;
+    // The final chord uses Smooth so the progression resolves cleanly — but only when
+    // there's a previous chord to resolve from. A single-chord progression just uses
+    // the chosen voicing (otherwise Smooth wins for a 1-chord build).
+    const v = (isFinal && i > 0) ? 'smooth' : voicing;
     c.notes = voiceChord(c.rootPc, c.quality, prevMidi, c.useSharps, v, c.extension);
     prevMidi = c.notes.map(noteToMidi);
   }
@@ -1955,13 +2107,16 @@ function rebuildFromCustom() {
     const forceFlat = /^b/.test(item.roman);
     const forceSharp = /^#/.test(item.roman);
     const us = forceFlat ? false : (forceSharp ? true : useSharpsKey);
+    const quality = item.quality || d.quality;
+    const extension = item.extension || null;
     return {
       numeral: d.numeral,
-      name: buildChordName(rootPc, d.quality, item.extension || null, us),
+      name: buildChordName(rootPc, quality, extension, us),
       rootPc,
-      quality: d.quality,
+      quality,
+      naturalQuality: d.quality,
       useSharps: us,
-      extension: item.extension || null,
+      extension,
       notes: null,
     };
   }).filter(Boolean);
@@ -1982,6 +2137,9 @@ function removeCustomChord(idx) {
   if (idx > 0 && idx - 1 < passingChords.length) passingChords.splice(idx - 1, 1);
   else if (passingChords.length) passingChords.splice(Math.min(idx, passingChords.length - 1), 1);
   markLoadedModified();
+  // Removing the chord destroys the element before mouseleave can fire, so clear by hand
+  clearKeyboard();
+  clearNoteNames();
   rebuildFromCustom();
 }
 function moveCustomChord(fromIdx, toIdx) {
@@ -1992,11 +2150,15 @@ function moveCustomChord(fromIdx, toIdx) {
   // Reordering invalidates passing-chord slot semantics — clear them
   passingChords = new Array(Math.max(0, customProgression.length - 1)).fill(null);
   markLoadedModified();
+  clearKeyboard();
+  clearNoteNames();
   rebuildFromCustom();
 }
 function clearCustomProgression() {
   customProgression = [];
   passingChords = [];
+  clearKeyboard();
+  clearNoteNames();
   rebuildFromCustom();
 }
 
@@ -2056,13 +2218,24 @@ function renderProgression() {
 function makeChordBlock(chord, isPassing) {
   const block = document.createElement('div');
   block.className = 'chord' + (isPassing ? ' passing' : '');
-  // Render numerals: prettify leading flat/sharp and slash-notation accidentals
-  const prettyNumeral = chord.numeral
-    .replace(/^b/, '♭').replace(/^#/, '♯')
-    .replace(/\/b/, '/♭').replace(/\/#/, '/♯');
-  const extSpan = chord.extension ? `<span class="ext-suffix">${chord.extension}</span>` : '';
+
+  let prettyBase, suffix;
+  if (isPassing) {
+    // Passing chord numerals are pre-built by the suggestion engine (may contain slash notation)
+    prettyBase = chord.numeral
+      .replace(/^b/, '♭').replace(/^#/, '♯')
+      .replace(/\/b/, '/♭').replace(/\/#/, '/♯');
+    suffix = chord.extension || '';
+  } else {
+    // Main chord: derive numeral from current quality+extension so chord-type changes show up
+    const keyPc = parseInt(keySelect.value, 10);
+    prettyBase = makeNumeralBase(chord.rootPc, keyPc, chord.quality)
+      .replace(/^b/, '♭').replace(/^#/, '♯');
+    suffix = makeNumeralSuffix(chord.quality, chord.extension);
+  }
+  const extSpan = suffix ? `<span class="ext-suffix">${suffix}</span>` : '';
   block.innerHTML = `
-    <div class="numeral">${prettyNumeral}${extSpan}</div>
+    <div class="numeral">${prettyBase}${extSpan}</div>
     <div class="chord-name">${chord.name}</div>
   `;
   // Silent hover preview: light up the keyboard + show note chips while hovered.
@@ -2078,10 +2251,17 @@ function makeChordBlock(chord, isPassing) {
   });
   // Main chords get an extension picker badge under the chord name
   if (!isPassing) {
+    const isModified = (chord.naturalQuality && chord.quality !== chord.naturalQuality) || !!chord.extension;
+    const btnSuffix = makeNumeralSuffix(chord.quality, chord.extension);
+    let btnLabel = '+';
+    if (isModified) {
+      // Show the suffix; for quality-only changes (no extension, no suffix), show a small marker
+      btnLabel = btnSuffix || ({ min:'m', dim:'°', aug:'+', sus2:'sus2', sus4:'sus4', maj:'M' })[chord.quality] || '·';
+    }
     const extBtn = document.createElement('button');
-    extBtn.className = 'chord-ext-btn' + (chord.extension ? ' has-ext' : '');
-    extBtn.textContent = chord.extension || '+';
-    extBtn.title = chord.extension ? 'Change color' : 'Add color (6, 7, maj7, add9, sus, …)';
+    extBtn.className = 'chord-ext-btn' + (isModified ? ' has-ext' : '');
+    extBtn.textContent = btnLabel;
+    extBtn.title = isModified ? 'Change chord type or color' : 'Add color or change chord type';
     extBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       openExtensionModal(chord);
@@ -2510,10 +2690,109 @@ const extensionModalEl = document.getElementById('extension-modal');
 const extensionTitle   = document.getElementById('extension-modal-title');
 const extensionList    = document.getElementById('extension-suggestions');
 
+// Change chord quality + extension in one shot (used by the All Chord Types palette)
+function applyChordType(chord, type) {
+  chord.quality = type.quality;
+  chord.extension = type.extension;
+  chord.name = buildChordName(chord.rootPc, type.quality, type.extension, chord.useSharps);
+  if (isCustomMode()) {
+    const idx = mainChords.indexOf(chord);
+    if (idx >= 0 && customProgression[idx]) {
+      customProgression[idx].quality = type.quality;
+      customProgression[idx].extension = type.extension;
+    }
+  }
+  markLoadedModified();
+  rebuildVoicings();
+  renderProgression();
+}
+
+// Build the "All Chord Types" chip palette appended to the extension modal
+function renderChordTypePalette(chord) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'chord-type-section';
+  wrapper.innerHTML = `
+    <div class="chord-type-section-title">Or pick any chord type</div>
+    <div class="chord-type-section-subtitle">Replaces the chord's quality entirely. Hover any chip to preview, click to apply.</div>
+  `;
+  const keyPc = parseInt(keySelect.value, 10);
+
+  // Voice a candidate chord-type as it would sit in the current progression context
+  const voiceCandidate = (type) => {
+    const idx = mainChords.indexOf(chord);
+    const prevChord = idx > 0 ? mainChords[idx - 1] : null;
+    const prevMidi = prevChord && prevChord.notes ? prevChord.notes.map(noteToMidi) : null;
+    const voicing = document.getElementById('voicing-select').value;
+    return voiceChord(chord.rootPc, type.quality, prevMidi, chord.useSharps, voicing, type.extension);
+  };
+
+  // Single shared timer for the hover-preview delay (so rapid mouse passes don't pile up)
+  let previewAudioTimer = null;
+
+  for (const group of CHORD_TYPE_GROUPS) {
+    const groupEl = document.createElement('div');
+    groupEl.className = 'chord-type-group';
+    groupEl.innerHTML = `<div class="chord-type-group-label">${group.label}</div><div class="chord-type-chips"></div>`;
+    const chipsEl = groupEl.querySelector('.chord-type-chips');
+
+    for (const type of group.types) {
+      const baseNumeral = makeNumeralBase(chord.rootPc, keyPc, type.quality);
+      const suffix = makeNumeralSuffix(type.quality, type.extension);
+      const prettyBase = baseNumeral.replace(/^b/, '♭').replace(/^#/, '♯');
+      const chordName = buildChordName(chord.rootPc, type.quality, type.extension, chord.useSharps);
+      const isCurrent = chord.quality === type.quality && (chord.extension || null) === (type.extension || null);
+
+      const chip = document.createElement('button');
+      chip.className = 'chord-type-chip' + (isCurrent ? ' current' : '');
+      chip.type = 'button';
+      chip.title = type.name + ' — hover to preview';
+      chip.innerHTML = `
+        <div class="chord-type-chip-numeral">${prettyBase}${suffix ? `<span class="ct-suffix">${suffix}</span>` : ''}</div>
+        <div class="chord-type-chip-name">${chordName}</div>`;
+
+      // Hover-preview: voice the chord, light up keyboard + chips immediately,
+      // and play audio after a short delay so rapid mouse passes don't fire many sounds.
+      chip.addEventListener('mouseenter', () => {
+        const notes = voiceCandidate(type);
+        highlightNotes(notes, false);
+        clearTimeout(previewAudioTimer);
+        previewAudioTimer = setTimeout(async () => {
+          await Tone.start();
+          sampler.releaseAll();
+          notes.forEach((note, i) => {
+            setTimeout(() => {
+              try { sampler.triggerAttack(note, Tone.now()); } catch(e) {}
+            }, i * 22);
+          });
+          setTimeout(() => sampler.releaseAll(), 1500);
+        }, 180);
+      });
+      chip.addEventListener('mouseleave', () => {
+        clearTimeout(previewAudioTimer);
+        clearKeyboard();
+        clearNoteNames();
+      });
+
+      // Click applies and closes
+      chip.addEventListener('click', () => {
+        clearTimeout(previewAudioTimer);
+        applyChordType(chord, type);
+        closeExtensionModal();
+      });
+
+      chipsEl.appendChild(chip);
+    }
+    wrapper.appendChild(groupEl);
+  }
+  return wrapper;
+}
+
 function openExtensionModal(chord) {
-  const prettyNumeral = chord.numeral.replace(/^b/, '♭').replace(/^#/, '♯');
+  const keyPc = parseInt(keySelect.value, 10);
+  const prettyBaseNumeral = makeNumeralBase(chord.rootPc, keyPc, chord.quality)
+    .replace(/^b/, '♭').replace(/^#/, '♯');
   const baseName = buildChordName(chord.rootPc, chord.quality, null, chord.useSharps);
-  extensionTitle.textContent = `Add color to ${prettyNumeral} (${baseName})`;
+  extensionTitle.textContent = `Modify ${prettyBaseNumeral} (${baseName})`;
   extensionList.innerHTML = '';
 
   for (const ext of EXTENSIONS) {
@@ -2521,7 +2800,7 @@ function openExtensionModal(chord) {
     const isCurrent = (chord.extension || null) === ext.id;
     const row = document.createElement('div');
     row.className = 'suggestion';
-    const labelNumeral = ext.id ? `${prettyNumeral}${ext.label}` : `${prettyNumeral}`;
+    const labelNumeral = ext.id ? `${prettyBaseNumeral}${ext.label}` : `${prettyBaseNumeral}`;
     row.innerHTML = `
       <div class="suggestion-numeral">${labelNumeral}</div>
       <div class="suggestion-body">
@@ -2553,6 +2832,9 @@ function openExtensionModal(chord) {
     });
     extensionList.appendChild(row);
   }
+
+  // Append the "All Chord Types" chip palette below the explained options
+  extensionList.appendChild(renderChordTypePalette(chord));
 
   extensionModalEl.hidden = false;
 }
@@ -2752,6 +3034,7 @@ function captureState() {
     voicing: document.getElementById('voicing-select').value,
     tempo: tempoSlider.value,
     extensions: custom ? null : mainChords.map(c => c.extension || null),
+    qualities:  custom ? null : mainChords.map(c => c.quality),
     customProgression: custom ? customProgression.slice() : null,
     passings: passingChords.map(p => p ? {
       rootPc: p.rootPc, quality: p.quality, extension: p.extension || null,
@@ -2802,12 +3085,20 @@ function applyState(state) {
   } else {
     progSelect.value = state.progressionId;
     render();
+    if (state.qualities) {
+      for (let i = 0; i < Math.min(state.qualities.length, mainChords.length); i++) {
+        if (state.qualities[i]) mainChords[i].quality = state.qualities[i];
+      }
+    }
     if (state.extensions) {
       for (let i = 0; i < Math.min(state.extensions.length, mainChords.length); i++) {
         const ext = state.extensions[i] || null;
         mainChords[i].extension = ext;
-        mainChords[i].name = buildChordName(mainChords[i].rootPc, mainChords[i].quality, ext, mainChords[i].useSharps);
       }
+    }
+    // Rebuild names after any quality/extension changes
+    for (const c of mainChords) {
+      c.name = buildChordName(c.rootPc, c.quality, c.extension, c.useSharps);
     }
   }
   // Reapply passing chords into their slots
