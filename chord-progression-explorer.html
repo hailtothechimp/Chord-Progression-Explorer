@@ -945,6 +945,55 @@
     font-family: 'Helvetica', sans-serif;
   }
 
+  /* Passing chord custom builder — root selector chips */
+  .passing-root-section {
+    margin-bottom: 16px;
+    padding-bottom: 14px;
+    border-bottom: 1px dashed var(--border);
+  }
+  .passing-root-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .passing-root-chip {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px 12px 6px;
+    cursor: pointer;
+    font-family: inherit;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transition: background 0.1s, border-color 0.1s, transform 0.08s;
+    min-width: 50px;
+    user-select: none;
+  }
+  .passing-root-chip:hover {
+    background: rgba(125, 211, 252, 0.12);
+    border-color: var(--accent);
+    transform: translateY(-1px);
+  }
+  .passing-root-chip.selected {
+    background: rgba(125, 211, 252, 0.22);
+    border-color: var(--accent-strong);
+    box-shadow: 0 0 0 1px var(--accent-strong);
+  }
+  .passing-root-chip .root-numeral {
+    font-family: 'Georgia', serif;
+    font-size: 16px;
+    color: var(--text);
+    line-height: 1;
+  }
+  .passing-root-chip.borrowed .root-numeral { color: var(--passing); }
+  .passing-root-chip .root-name {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
   /* ─── Playback bar ───────────────────────────────────────── */
   .playback {
     background: var(--panel);
@@ -1318,6 +1367,14 @@ function getChordIntervals(quality, extension) {
   // sus extensions replace the 3rd entirely
   if (extension === 'sus4') return [0, 5, 7];
   if (extension === 'sus2') return [0, 2, 7];
+  // Altered extensions that change the 5th can't be purely additive — they specify
+  // the complete chord. Returned as-is regardless of base quality.
+  const ALTERED_FULL = {
+    '7b5':  [0, 4, 6, 10],
+    '9b5':  [0, 4, 6, 10, 14],
+    '7alt': [0, 4, 8, 10, 13, 15],   // ♭9, ♯9, ♯5 — the all-altered dom voicing
+  };
+  if (ALTERED_FULL[extension]) return ALTERED_FULL[extension];
   const base = {
     maj:  [0, 4, 7],
     min:  [0, 3, 7],
@@ -1330,12 +1387,33 @@ function getChordIntervals(quality, extension) {
   }[quality] || [0, 4, 7];
   if (!extension) return base;
   switch (extension) {
-    case '6':    return base.concat([9]);
-    case 'add9': return base.concat([14]);
-    case '7':    return base.concat([10]);
-    case 'maj7': return base.concat([11]);
-    case '9':    return base.concat([10, 14]);
-    case 'maj9': return base.concat([11, 14]);
+    case '6':         return base.concat([9]);
+    case '6/9':       return base.concat([9, 14]);
+    case 'add9':      return base.concat([14]);
+    case 'add11':     return base.concat([17]);   // natural 11 (no 7th) — Dorian shimmer on min
+    case 'add#11':    return base.concat([18]);   // ♯11 (no 7th) — Lydian shimmer on maj
+    case '7':         return base.concat([10]);
+    case 'maj7':      return base.concat([11]);
+    case '9':         return base.concat([10, 14]);
+    case 'maj9':      return base.concat([11, 14]);
+    // 11ths — full stack: ♭7 + 9 + 11
+    case '11':        return base.concat([10, 14, 17]);
+    case 'maj11':     return base.concat([11, 14, 17]);
+    // 13ths — convention omits the 11th to avoid clashing with the 3rd
+    case '13':        return base.concat([10, 14, 21]);
+    case 'maj13':     return base.concat([11, 14, 21]);
+    // Lydian-flavored chords with the raised 11 (♯11 = +18 semitones from root)
+    case '7#11':      return base.concat([10, 18]);
+    case 'maj7#11':   return base.concat([11, 18]);
+    case '9#11':      return base.concat([10, 14, 18]);
+    case 'maj9#11':   return base.concat([11, 14, 18]);
+    case '13#11':     return base.concat([10, 14, 18, 21]);
+    case 'maj13#11':  return base.concat([11, 14, 18, 21]);
+    // Altered tensions added on top of the base triad
+    case '7b9':       return base.concat([10, 13]);
+    case '7#9':       return base.concat([10, 15]);
+    case '13b9':      return base.concat([10, 13, 21]);
+    case '13#9':      return base.concat([10, 15, 21]);
   }
   return base;
 }
@@ -1520,19 +1598,22 @@ function voiceChord(rootPc, quality, prevMidi, useSharps, voicing, extension) {
   });
 }
 
-// Build a display chord name (e.g., "Cmaj7", "Am6", "G7sus4") combining root, quality, extension
+// Build a display chord name (e.g., "Cmaj7", "Am6", "G7sus4", "C7♭9") combining root, quality, extension
 function buildChordName(rootPc, quality, extension, useSharps) {
   const root = noteName(rootPc, useSharps);
+  // Prettify ♭/♯ in the extension string (e.g., '7b9' → '7♭9', '13#11' → '13♯11')
+  const prettyExt = extension ? extension.replace(/b/g, '♭').replace(/#/g, '♯') : '';
   // Sus quality with an upper extension renders the ext BEFORE 'sus': "C7sus4", "C9sus4"
   if (quality === 'sus4' || quality === 'sus2') {
-    return root + (extension || '') + quality;
+    return root + prettyExt + quality;
   }
   // Sus passed as an extension on a non-sus quality overrides the quality designation
   if (extension === 'sus4' || extension === 'sus2') return root + extension;
-  // Half-diminished: dim quality + 7 extension uses ø7 notation, not °7 (which is fully dim)
-  if (quality === 'dim' && extension === '7') return root + 'ø7';
+  // Half-diminished family: dim quality + any extension uses ø notation (ø7, ø9, ø11),
+  // NOT °7 (which means fully-diminished bb7).
+  if (quality === 'dim' && extension) return root + 'ø' + prettyExt;
   const baseSfx = { maj:'', min:'m', dim:'°', dim7:'°7', dom7:'7', aug:'+' }[quality] || '';
-  return root + baseSfx + (extension || '');
+  return root + baseSfx + prettyExt;
 }
 
 // Make the Nashville-numeral "base" (e.g., "I", "ii", "♭VII") from a chord's
@@ -1552,14 +1633,29 @@ function makeNumeralBase(rootPc, keyPc, quality) {
 // Compute the chord-type suffix (e.g., "maj7", "ø7", "+", "sus4") for a given quality+extension
 const NUMERAL_SUFFIXES = {
   'maj|null': '',      'maj|6':    '6',    'maj|7':    '7',     'maj|maj7':  'maj7',
-  'maj|add9': 'add9',  'maj|9':    '9',    'maj|maj9': 'maj9',  'maj|11':    '11',  'maj|13': '13',
+  'maj|6/9':  '6/9',
+  'maj|add9': 'add9',  'maj|add#11': 'add♯11',
+  'maj|9':    '9',    'maj|maj9': 'maj9',
+  'maj|11':   '11',    'maj|maj11':'maj11','maj|13':   '13',    'maj|maj13': 'maj13',
+  // Lydian (♯11) family
+  'maj|7#11':     '7♯11',     'maj|maj7#11':  'maj7♯11',
+  'maj|9#11':     '9♯11',     'maj|maj9#11':  'maj9♯11',
+  'maj|13#11':    '13♯11',    'maj|maj13#11': 'maj13♯11',
+  // Altered dominants
+  'maj|7b5':      '7♭5',      'maj|7b9':      '7♭9',     'maj|7#9':  '7♯9',
+  'maj|9b5':      '9♭5',
+  'maj|13b9':     '13♭9',     'maj|13#9':     '13♯9',
+  'maj|7alt':     '7alt',
   'min|null': '',      'min|6':    '6',    'min|7':    '7',     'min|maj7':  '(maj7)',
-  'min|add9': '(add9)','min|9':    '9',
-  'dim|null': '°',     'dim|7':    'ø7',
+  'min|6/9':  '6/9',
+  'min|add9': '(add9)','min|add11':'(add11)',
+  'min|9':    '9',    'min|maj9': '(maj9)',
+  'min|11':   '11',    'min|13':    '13',
+  'dim|null': '°',     'dim|7':    'ø7',   'dim|9':    'ø9',    'dim|11':    'ø11',
   'dim7|null': '°7',
-  'aug|null': '+',     'aug|7':    '+7',   'aug|maj7': '+(maj7)',
+  'aug|null': '+',     'aug|7':    '+7',   'aug|maj7': '+(maj7)','aug|9':    '+9',
   'sus2|null': 'sus2', 'sus2|7':   '7sus2',
-  'sus4|null': 'sus4', 'sus4|7':   '7sus4', 'sus4|9':  '9sus4',
+  'sus4|null': 'sus4', 'sus4|7':   '7sus4', 'sus4|9':  '9sus4', 'sus4|13':  '13sus4',
 };
 function makeNumeralSuffix(quality, extension) {
   const k = quality + '|' + (extension || 'null');
@@ -1590,11 +1686,47 @@ const CHORD_TYPE_GROUPS = [
     { quality:'aug',  extension:'7',     name:'Augmented 7' },
   ]},
   { label: '9ths & Extensions', types: [
-    { quality:'maj',  extension:'add9',  name:'Add 9' },
-    { quality:'min',  extension:'add9',  name:'Minor Add 9' },
-    { quality:'maj',  extension:'9',     name:'Dominant 9' },
-    { quality:'maj',  extension:'maj9',  name:'Major 9' },
-    { quality:'min',  extension:'9',     name:'Minor 9' },
+    { quality:'maj',  extension:'add9',     name:'Add 9' },
+    { quality:'min',  extension:'add9',     name:'Minor Add 9' },
+    { quality:'maj',  extension:'add#11',   name:'Add ♯11 (Lydian Shimmer)' },
+    { quality:'min',  extension:'add11',    name:'Minor Add 11 (Dorian)' },
+    { quality:'maj',  extension:'9',        name:'Dominant 9' },
+    { quality:'maj',  extension:'maj9',     name:'Major 9' },
+    { quality:'min',  extension:'9',        name:'Minor 9' },
+    { quality:'min',  extension:'maj9',     name:'Minor-Major 9 (mMaj9)' },
+    { quality:'aug',  extension:'9',        name:'Augmented 9 (+9)' },
+    { quality:'aug',  extension:'maj9',     name:'Augmented Maj 9 (+maj9)' },
+  ]},
+  { label: '11ths & 13ths', types: [
+    { quality:'maj',  extension:'11',     name:'Dominant 11' },
+    { quality:'min',  extension:'11',     name:'Minor 11' },
+    { quality:'maj',  extension:'maj11',  name:'Major 11' },
+    { quality:'maj',  extension:'13',     name:'Dominant 13' },
+    { quality:'maj',  extension:'maj13',  name:'Major 13' },
+    { quality:'min',  extension:'13',     name:'Minor 13' },
+    { quality:'maj',  extension:'6/9',    name:'6/9 (Major)' },
+    { quality:'min',  extension:'6/9',    name:'6/9 (Minor)' },
+  ]},
+  { label: 'Lydian (♯11)', types: [
+    { quality:'maj',  extension:'7#11',    name:'Dom 7 ♯11 (Lydian Dom)' },
+    { quality:'maj',  extension:'maj7#11', name:'Maj 7 ♯11 (Lydian)' },
+    { quality:'maj',  extension:'9#11',    name:'Dom 9 ♯11' },
+    { quality:'maj',  extension:'maj9#11', name:'Maj 9 ♯11' },
+    { quality:'maj',  extension:'13#11',   name:'Dom 13 ♯11' },
+    { quality:'maj',  extension:'maj13#11',name:'Maj 13 ♯11' },
+  ]},
+  { label: 'Altered Dominants', types: [
+    { quality:'maj',  extension:'7b5',     name:'Dom 7 ♭5' },
+    { quality:'maj',  extension:'7b9',     name:'Dom 7 ♭9' },
+    { quality:'maj',  extension:'7#9',     name:'Dom 7 ♯9 (Hendrix)' },
+    { quality:'maj',  extension:'9b5',     name:'Dom 9 ♭5' },
+    { quality:'maj',  extension:'13b9',    name:'Dom 13 ♭9' },
+    { quality:'maj',  extension:'13#9',    name:'Dom 13 ♯9' },
+    { quality:'maj',  extension:'7alt',    name:'Dom 7 alt (♭9 ♯9 ♯5)' },
+  ]},
+  { label: 'Half-Diminished', types: [
+    { quality:'dim',  extension:'9',       name:'Half-Dim 9 (ø9)' },
+    { quality:'dim',  extension:'11',      name:'Half-Dim 11 (ø11)' },
   ]},
   { label: 'Suspended 7ths', types: [
     { quality:'sus4', extension:'7',     name:'7 sus 4' },
@@ -2617,6 +2749,156 @@ const modalEl = document.getElementById('passing-modal');
 const modalTitle = document.getElementById('passing-modal-title');
 const modalList = document.getElementById('passing-suggestions');
 
+// Custom passing-chord builder: pick a root + any chord type from the same palette
+// used for main chords. Hover-previews the chord in context; click inserts it.
+function renderPassingChordCustomBuilder(slotIndex) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'chord-type-section';
+  wrapper.innerHTML = `
+    <div class="chord-type-section-title">Or build your own passing chord</div>
+    <div class="chord-type-section-subtitle">Pick a root, then any chord type. Hover any chip to preview.</div>
+  `;
+
+  const keyPc = parseInt(keySelect.value, 10);
+  const useSharpsKey = SHARP_KEYS.has(keyPc);
+  const mode = modeSelect.value;
+  const targetChord = mainChords[slotIndex + 1];
+  const prevChord   = mainChords[slotIndex];
+
+  // Diatonic + common borrowed scale degrees available as roots
+  const allRoots = (mode === 'major')
+    ? ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°', 'bII', 'bIII', 'bVI', 'bVII']
+    : ['i', 'ii°', 'III', 'iv', 'v', 'V', 'VI', 'VII', 'bII', 'bIII'];
+
+  const rootSection = document.createElement('div');
+  rootSection.className = 'passing-root-section';
+  rootSection.innerHTML = `
+    <div class="chord-type-group-label">Root</div>
+    <div class="passing-root-chips"></div>
+  `;
+  const rootChipsEl = rootSection.querySelector('.passing-root-chips');
+
+  const typesSection = document.createElement('div');
+  typesSection.className = 'passing-types-section';
+
+  let currentRoot = null;          // { rootPc, useSharps, roman }
+  let previewAudioTimer = null;
+
+  function rebuildChordTypeChips() {
+    typesSection.innerHTML = '';
+    if (!currentRoot) return;
+    const { rootPc, useSharps } = currentRoot;
+
+    const voiceCandidate = (type) => {
+      const prevMidi = prevChord && prevChord.notes ? prevChord.notes.map(noteToMidi) : null;
+      const voicing = document.getElementById('voicing-select').value;
+      return voiceChord(rootPc, type.quality, prevMidi, useSharps, voicing, type.extension);
+    };
+
+    for (const group of CHORD_TYPE_GROUPS) {
+      const groupEl = document.createElement('div');
+      groupEl.className = 'chord-type-group';
+      groupEl.innerHTML = `<div class="chord-type-group-label">${group.label}</div><div class="chord-type-chips"></div>`;
+      const chipsEl = groupEl.querySelector('.chord-type-chips');
+
+      for (const type of group.types) {
+        const baseNumeral = makeNumeralBase(rootPc, keyPc, type.quality);
+        const suffix = makeNumeralSuffix(type.quality, type.extension);
+        const prettyBase = baseNumeral.replace(/^b/, '♭').replace(/^#/, '♯');
+        const chordName = buildChordName(rootPc, type.quality, type.extension, useSharps);
+        const fullNumeral = prettyBase + suffix;
+
+        const chip = document.createElement('button');
+        chip.className = 'chord-type-chip';
+        chip.type = 'button';
+        chip.title = type.name + ' — hover to preview';
+        chip.innerHTML = `
+          <div class="chord-type-chip-numeral">${prettyBase}${suffix ? `<span class="ct-suffix">${suffix}</span>` : ''}</div>
+          <div class="chord-type-chip-name">${chordName}</div>`;
+
+        chip.addEventListener('mouseenter', () => {
+          const notes = voiceCandidate(type);
+          highlightNotes(notes, true);
+          clearTimeout(previewAudioTimer);
+          previewAudioTimer = setTimeout(async () => {
+            await Tone.start();
+            sampler.releaseAll();
+            notes.forEach((note, i) => {
+              setTimeout(() => {
+                try { sampler.triggerAttack(note, Tone.now()); } catch(e) {}
+              }, i * 22);
+            });
+            setTimeout(() => sampler.releaseAll(), 1500);
+          }, 180);
+        });
+        chip.addEventListener('mouseleave', () => {
+          clearTimeout(previewAudioTimer);
+          clearKeyboard();
+          clearNoteNames();
+        });
+
+        chip.addEventListener('click', () => {
+          clearTimeout(previewAudioTimer);
+          passingChords[slotIndex] = {
+            rootPc,
+            quality: type.quality,
+            extension: type.extension,
+            useSharps,
+            numeral: fullNumeral,
+            name: chordName,
+            why: `Custom passing chord — ${type.name}`,
+            isPassing: true,
+            notes: null,
+          };
+          markLoadedModified();
+          rebuildVoicings();
+          renderProgression();
+          closePassingModal();
+        });
+
+        chipsEl.appendChild(chip);
+      }
+      typesSection.appendChild(groupEl);
+    }
+  }
+
+  for (const roman of allRoots) {
+    const d = findDiatonic(mode, roman);
+    if (!d) continue;
+    const rootPc = (keyPc + d.interval) % 12;
+    const forceFlat = /^b/.test(roman);
+    const forceSharp = /^#/.test(roman);
+    const us = forceFlat ? false : (forceSharp ? true : useSharpsKey);
+    const baseName = noteName(rootPc, us);
+    const pretty = roman.replace(/^b/, '♭').replace(/^#/, '♯');
+
+    const chip = document.createElement('button');
+    chip.className = 'passing-root-chip' + (/^[b#]/.test(roman) ? ' borrowed' : '');
+    chip.type = 'button';
+    chip.title = `Build a chord on ${pretty} (${baseName})`;
+    chip.innerHTML = `<div class="root-numeral">${pretty}</div><div class="root-name">${baseName}</div>`;
+    chip.addEventListener('click', () => {
+      rootChipsEl.querySelectorAll('.passing-root-chip').forEach(c => c.classList.remove('selected'));
+      chip.classList.add('selected');
+      currentRoot = { rootPc, useSharps: us, roman };
+      rebuildChordTypeChips();
+    });
+
+    // Default to the target chord's root so the most useful palette appears first
+    if (targetChord && roman === targetChord.numeral && !currentRoot) {
+      currentRoot = { rootPc, useSharps: us, roman };
+      chip.classList.add('selected');
+    }
+    rootChipsEl.appendChild(chip);
+  }
+
+  if (currentRoot) rebuildChordTypeChips();
+
+  wrapper.appendChild(rootSection);
+  wrapper.appendChild(typesSection);
+  return wrapper;
+}
+
 function openPassingModal(slotIndex) {
   const from = mainChords[slotIndex];
   const to = mainChords[slotIndex + 1];
@@ -2660,6 +2942,9 @@ function openPassingModal(slotIndex) {
     modalList.appendChild(row);
   });
 
+  // Append the custom "build your own" passing chord builder below the suggestions
+  modalList.appendChild(renderPassingChordCustomBuilder(slotIndex));
+
   modalEl.hidden = false;
 }
 
@@ -2676,6 +2961,8 @@ const EXTENSIONS = [
   { id: 'maj7',  label: 'maj7',   why: 'Adds the natural 7th — dreamy, jazzy lift. Especially gorgeous on I and IV in major keys.' },
   { id: 'add9',  label: 'add9',   why: 'Adds the 9th without a 7th — open, sparkly, modern pop sound.' },
   { id: '9',     label: '9',      why: 'Adds both the ♭7 and the 9th — full jazz/soul color.' },
+  { id: '11',    label: '11',     why: 'Adds the ♭7, 9th, and 11th — a tall stacked-fifths sound. Smooth and soulful on minor chords; quite dissonant on major (the 11 clashes with the 3rd), which is why dom11 is often voiced without the 3rd as a "sus11" sound.' },
+  { id: '13',    label: '13',     why: 'Adds the ♭7, 9th, and 13th (the 11th is conventionally omitted to keep the 3rd clean). The fullest, lushest jazz/soul chord — think Steely Dan, D\'Angelo, Bill Evans.' },
   { id: 'sus4',  label: 'sus4',   why: 'Replaces the 3rd with the 4th — a held, unresolved tension. Neither major nor minor.' },
   { id: 'sus2',  label: 'sus2',   why: 'Replaces the 3rd with the 2nd — open, floating, ambient.' },
 ];
