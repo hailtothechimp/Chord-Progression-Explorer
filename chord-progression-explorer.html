@@ -1634,14 +1634,8 @@ function resolveProgression(romanList, keyPc, mode) {
 function applyVoiceLeading(sequence) {
   const voicing = document.getElementById('voicing-select')?.value || 'smooth';
   let prevMidi = null;
-  for (let i = 0; i < sequence.length; i++) {
-    const c = sequence[i];
-    const isFinal = i === sequence.length - 1;
-    // The final chord uses Smooth so the progression resolves cleanly — but only when
-    // there's a previous chord to resolve from. A single-chord progression just uses
-    // the chosen voicing (otherwise Smooth wins for a 1-chord build).
-    const v = (isFinal && i > 0) ? 'smooth' : voicing;
-    c.notes = voiceChord(c.rootPc, c.quality, prevMidi, c.useSharps, v, c.extension);
+  for (const c of sequence) {
+    c.notes = voiceChord(c.rootPc, c.quality, prevMidi, c.useSharps, voicing, c.extension);
     prevMidi = c.notes.map(noteToMidi);
   }
 }
